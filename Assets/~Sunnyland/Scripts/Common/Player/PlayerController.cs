@@ -56,7 +56,7 @@ namespace SunnyLand
         private Vector3 moveDirection;
         private int currentJump = 0;
 
-        private float vertical, horizontal;
+        private float inputV, inputH;
 
         // References
         private SpriteRenderer rend;
@@ -72,8 +72,8 @@ namespace SunnyLand
         }
         void Update()
         {
-            // Apple gravity to move direction
-            moveDirection.y += Physics.gravity.y * Time.deltaTime;
+            PerformMove();
+            PerformJump();
         }
         void FixedUpdate()
         {
@@ -88,6 +88,41 @@ namespace SunnyLand
         #endregion
 
         #region Custom Functions
+        void PerformMove()
+        {
+            if (isOnSlope && inputH == 0 && isGrounded)
+            {
+                // Cancel the velocity
+                rigid.velocity = Vector3.zero;
+            }
+
+            Vector3 right = Vector3.Cross(groundNormal, Vector3.back);
+            rigid.AddForce(right * inputH * speed);
+
+            // Limit the velocity max velocity
+            LimitVelocity();
+        }
+
+        void PerformJump()
+        {
+            // If player is jumping
+            if (isJumping)
+            {
+                // If player is allowed to jump
+                if (currentJump < maxJumpCount)
+                {
+                    // Increase the jump count
+                    currentJump++;
+                    // Perform jump logic
+                    rigid.AddForce(Vector2.up * jumpHeight, ForceMode2D.Impulse);
+                }
+                // Reset jump input
+                isJumping = false;
+            }
+
+
+        }
+
         bool CheckSlope(RaycastHit2D hit)
         {
             // Grab the angle in degrees of the surface we're standing on
@@ -158,6 +193,18 @@ namespace SunnyLand
             RaycastHit2D[] hits = Physics2D.RaycastAll(groundRay.origin, groundRay.direction, rayDistance);
             foreach (var hit in hits)
             {
+                // Detect if on a slope
+                if (Mathf.Abs(hit.normal.x) > 0.1f)
+                {
+                    // Set gravity to zero
+                    rigid.gravityScale = 0;
+                }
+                else
+                {
+                    // Set gravity to one
+                    rigid.gravityScale = 1;
+                }
+
                 if (CheckGround(hit))
                 {
                     // We found the ground! So exit the loop
@@ -186,38 +233,42 @@ namespace SunnyLand
                 rigid.velocity = rigid.velocity.normalized * maxVelocity;
             }
         }
+        
+        void EnablePhysics()
+        {
+            rigid.simulated = true;
+            rigid.gravityScale = 1;
+        }
+
+        void DisablePhysics()
+        {
+            rigid.simulated = false;
+            rigid.gravityScale = 0;
+        }
 
         public void Jump()
         {
-            // If currentJump is less than max jump
-            if (currentJump < maxJumpCount)
+            isJumping = true;
+
+            if (onJump != null)
             {
-                // Increment currentJump
-                currentJump++;
-                // Add force to player (using Impulse)
-                rigid.AddForce(Vector2.up * jumpHeight, ForceMode2D.Impulse);
+                onJump.Invoke();
             }
         }
         public void Move(float horizontal)
         {
-            // If horizontal > 0
-            if (horizontal > 0)
+            if (horizontal != 0)
             {
-                // Flip Character
-                rend.flipX = false;
-            }
-            // If horizontal < 0
-            if (horizontal < 0)
-            {
-                // Flip Character
-                rend.flipX = true;
+                rend.flipX = horizontal < 0;
             }
 
-            // Add force to player in the right direction
-            rigid.AddForce(new Vector2(horizontal, 0) * speed);
+            inputH = horizontal;
 
-            // Limit Velocity
-            LimitVelocity();
+            // Invoke Event
+            if (onMove != null)
+            {
+                onMove.Invoke(inputH);
+            }
         }
         public void Climb()
         {
